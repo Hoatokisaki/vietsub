@@ -1,0 +1,20 @@
+;The comment below contains SFX script commands
+
+Title=Cài đặt luaVietsup Pro - AI Subtitles & Voice
+Text
+=====================================================
+       luaVietsup Pro - Phiên bản 2.6 (Đầy đủ)
+  Tự động Bóc băng, Dịch thuật Tiểu thuyết & Lồng tiếng AI
+=====================================================
+
+Ứng dụng sẽ được cài đặt vào thư mục mặc định bên dưới:
+C:\SirVietsub_Pro
+
+Bạn có thể giữ nguyên hoặc chọn thư mục cài đặt mong muốn.
+EndText
+Path=C:\SirVietsub_Pro
+SavePath
+Shortcut=D, luaVietsup-ModelFix4.exe, "", "luaVietsup Pro - AI Subtitle Tool", "luaVietsup Pro"
+Shortcut=P, luaVietsup-ModelFix4.exe, "", "luaVietsup Pro - AI Subtitle Tool", "luaVietsup Pro"
+Overwrite=1
+Setup=luaVietsup-ModelFix4.exe

@@ -1,0 +1,18 @@
+============================================================
+           HƯỚNG DẪN SỬ DỤNG LUAVIETSUP PRO v2.6
+============================================================
+
+1. Khởi động phần mềm:
+   - Nhấp đúp vào biểu tượng "luaVietsup Pro" trên Màn hình chính (Desktop)
+   - Hoặc chạy file: luaVietsup-ModelFix4.exe trong thư mục cài đặt.
+
+2. Các tính năng nổi bật:
+   - Bóc âm siêu tốc (Whisper / Faster-Whisper / VAD Filter).
+   - Dịch thuật Tiểu thuyết Trung - Việt hoa mỹ chuyên sâu:
+     + Tự động xưng hô chuẩn mực tôn ti trật tự gia đình, sư môn, giang hồ.
+     + Chuẩn hóa 100% âm Hán - Việt tên nhân vật, địa danh, công pháp.
+     + Văn phong mượt mà, giàu nhịp điệu văn học, thoát ý tự nhiên.
+   - Hỗ trợ Custom API & ChatGPT Web miễn phí.
+   - Tạo giọng đọc AI (TTS) nội bộ Offline (Piper) hoặc Online (TikTok/Edge).
+   - Xuất video đa định dạng, hỗ trợ GPU NVENC / CPU siêu tốc.
+============================================================
