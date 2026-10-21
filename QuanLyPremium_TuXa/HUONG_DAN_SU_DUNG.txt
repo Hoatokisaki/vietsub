@@ -1,0 +1,14 @@
+HƯỚNG DẪN SỬ DỤNG ỨNG DỤNG QUẢN LÝ PREMIUM TỪ XA
+=====================================================
+
+1. Giới thiệu:
+   Đây là ứng dụng quản trị độc lập (Standalone App) để bạn kích hoạt, gia hạn, thu hồi hoặc kiểm tra bản quyền Premium theo mã máy (HWID) từ xa.
+   Các nút "Nạp gói Premium" và "Quản lý Premium từ xa" trong phần Cài đặt của ứng dụng chính đã được gỡ bỏ hoàn toàn, người dùng thông thường sẽ không thấy các tính năng quản trị này.
+
+2. Cách sử dụng:
+   - Mở file: QUAN_LY_PREMIUM_TU_XA.exe
+   - Nhập Service URL (đã cấu hình sẵn ngrok / server của bạn).
+   - Nhập Admin Token bí mật để xác thực quyền quản trị viên.
+   - Nhập Mã máy (HWID) của người dùng cần kích hoạt.
+   - Chọn gói (Ví dụ: 30 ngày, 90 ngày, 365 ngày, Vĩnh viễn).
+   - Bấm nút "Kích hoạt / Gia hạn" hoặc "Kiểm tra trạng thái".

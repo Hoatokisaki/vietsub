@@ -1,0 +1,50 @@
+# ==========================================
+# luaVietsup Pro - Git Ignore Configuration
+# ==========================================
+
+# Large Runtime & Environment Bundles (>10GB)
+_internal/
+Lib/
+DLLs/
+work/staging/
+
+# Windows Binary Executables & Large Installers (>100MB violates GitHub limits)
+*.exe
+!setupapx.dll
+*.rar
+*.zip
+*.7z
+*.tar
+*.gz
+*.iso
+
+# Video & Media test artifacts
+*.mp4
+*.part
+*.mkv
+*.avi
+*.wav
+*.mp3
+
+# Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Local Data, Temporary Files & Logs
+Data/
+logs/
+*.log
+*.tmp
+*.bak
+.user_uploaded/
+.system_generated/
+scratch/
+test_output/
+
+# VS Code & IDE Settings
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace

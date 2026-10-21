@@ -1,0 +1,5 @@
+{
+    "update_url": "https://tquusprgcvyptgnvftwz.supabase.co/functions/v1/app-update",
+    "fallback_url": "https://raw.githubusercontent.com/luavietsup/releases/main/version.json",
+    "note": "Cấu hình URL kiểm tra và cập nhật online. Có thể dùng Supabase, GitHub raw, hoặc URL JSON máy chủ riêng."
+}
