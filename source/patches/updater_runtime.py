@@ -52,7 +52,8 @@ from qfluentwidgets import FluentIcon as FIF
 
 # Default remote update manifest endpoint
 DEFAULT_UPDATE_CONFIG_FILE = "update_config.json"
-FALLBACK_UPDATE_URL = "https://raw.githubusercontent.com/luavietsup/releases/main/version.json"
+FALLBACK_UPDATE_URL = "https://raw.githubusercontent.com/Hoatokisaki/vietsub/main/version.json"
+GITHUB_RELEASES_API = "https://api.github.com/repos/Hoatokisaki/vietsub/releases/latest"
 
 
 def get_app_dir() -> Path:
@@ -127,7 +128,7 @@ def is_newer_version(remote_v: str, local_v: str) -> bool:
 
 
 def fetch_remote_manifest(url: str, timeout: float = 6.0) -> dict | None:
-    """Fetch update manifest from URL."""
+    """Fetch update manifest from URL (supports custom JSON and GitHub Releases API)."""
     try:
         req = urllib.request.Request(
             url,
@@ -149,8 +150,37 @@ def fetch_remote_manifest(url: str, timeout: float = 6.0) -> dict | None:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
             data = json.loads(raw)
-            if isinstance(data, dict):
-                return data
+            if not isinstance(data, dict):
+                return None
+
+            # Detect GitHub Releases API response format
+            if "tag_name" in data and "assets" in data:
+                import re
+                tag_name = str(data.get("tag_name", "")).strip()
+                name_field = str(data.get("name", "")).strip()
+                ver_match = re.search(r"(\d+(\.\d+)+)", name_field + " " + tag_name)
+                version = ver_match.group(1) if ver_match else tag_name.lstrip("v")
+                
+                assets = data.get("assets", [])
+                download_url = data.get("html_url", "")
+                size_mb = 0
+                if assets:
+                    # Pick first installer asset or first archive
+                    download_url = assets[0].get("browser_download_url", download_url)
+                    size_mb = sum(int(a.get("size", 0)) for a in assets) // (1024 * 1024)
+
+                return {
+                    "version": version,
+                    "title": name_field or f"Bản cập nhật v{version}",
+                    "changelog": data.get("body", "Bản cập nhật phát hành trên GitHub."),
+                    "download_url": download_url,
+                    "url": data.get("html_url", ""),
+                    "release_date": (str(data.get("published_at", ""))[:10]),
+                    "size_mb": size_mb,
+                    "type": "installer",
+                }
+
+            return data
     except Exception:
         pass
     return None
@@ -165,10 +195,11 @@ def check_for_updates(current_version: str) -> tuple[bool, dict | None, str]:
     url = get_update_url()
     manifest = fetch_remote_manifest(url)
     
-    if not manifest:
-        # If primary failed, try fallback
-        if url != FALLBACK_UPDATE_URL:
-            manifest = fetch_remote_manifest(FALLBACK_UPDATE_URL, timeout=4.0)
+    if not manifest and url != FALLBACK_UPDATE_URL:
+        manifest = fetch_remote_manifest(FALLBACK_UPDATE_URL, timeout=4.0)
+
+    if not manifest and GITHUB_RELEASES_API not in (url, FALLBACK_UPDATE_URL):
+        manifest = fetch_remote_manifest(GITHUB_RELEASES_API, timeout=4.0)
 
     if not manifest:
         return False, None, "Không thể kết nối đến máy chủ cập nhật. Vui lòng kiểm tra lại kết nối mạng."
@@ -607,13 +638,23 @@ def setup_update_settings_ui(setting_interface, app_version: str):
                 if has_update and info:
                     dlg = UpdateDialog(app_version, info, parent=setting_interface.window())
                     dlg.exec()
-                else:
+                elif info is not None:
+                    # Checked successfully and already up to date
                     InfoBar.success(
                         title="Phiên bản mới nhất",
                         content=msg,
                         parent=setting_interface.window(),
                         position=InfoBarPosition.TOP,
                         duration=5000,
+                    )
+                else:
+                    # Connection failed or invalid data from server
+                    InfoBar.warning(
+                        title="Không thể kiểm tra cập nhật",
+                        content=msg,
+                        parent=setting_interface.window(),
+                        position=InfoBarPosition.TOP,
+                        duration=7000,
                     )
             except Exception as exc:
                 InfoBar.error(
