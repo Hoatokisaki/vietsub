@@ -1,5 +1,5 @@
 {
-  "version": "2.6",
+  "version": "2.7",
   "release_date": "2026-10-21",
   "title": "Bản phát hành luaVietsup Pro v2.6",
   "changelog": "- Sửa lỗi thư viện CUDA 12 cublas64_12.dll trên GPU Whisper Mode 5\n- Sửa lỗi render CPU trên Intel Core i5 thế hệ 14 (i5-14600F)\n- Thêm tính năng kiểm tra phiên bản và cập nhật trực tuyến ngay trên app\n- Quản lý bản quyền HWID từ xa độc lập",
