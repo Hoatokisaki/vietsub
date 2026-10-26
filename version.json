@@ -1,9 +1,9 @@
 {
-  "version": "2.6",
-  "release_date": "2026-10-21",
-  "title": "Bản phát hành luaVietsup Pro v2.6",
-  "changelog": "- Sửa lỗi thư viện CUDA 12 cublas64_12.dll trên GPU Whisper Mode 5\n- Sửa lỗi render CPU trên Intel Core i5 thế hệ 14 (i5-14600F)\n- Thêm tính năng kiểm tra phiên bản và cập nhật trực tuyến ngay trên app\n- Quản lý bản quyền HWID từ xa độc lập",
-  "download_url": "https://github.com/Hoatokisaki/vietsub/releases/tag/version",
-  "type": "installer",
-  "size_mb": 3874
+  "version": "2.7",
+  "release_date": "2026-10-26",
+  "title": "Bản cập nhật luaVietsup Pro v2.7",
+  "changelog": "- Tối ưu giao diện: Rút gọn nhãn 'Custom API'\n- Tích hợp Cầu nối AI thông minh toàn hệ thống (Dịch thuật, Rút gọn câu, Tiêu đề, Highlight)\n- Sửa lỗi nạp font chữ trong mục Style (Đầy đủ 30 font chữ)",
+  "download_url": "https://raw.githubusercontent.com/Hoatokisaki/vietsub/main/patch_v2.7.zip",
+  "type": "patch",
+  "size_mb": 1
 }
