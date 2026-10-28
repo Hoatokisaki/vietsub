@@ -1,8 +1,8 @@
 {
   "version": "2.7",
-  "release_date": "2026-10-26",
+  "release_date": "2026-10-28",
   "title": "Bản cập nhật luaVietsup Pro v2.7",
-  "changelog": "- Tối ưu giao diện: Rút gọn nhãn 'Custom API'\n- Tích hợp Cầu nối AI thông minh toàn hệ thống (Dịch thuật, Rút gọn câu, Tiêu đề, Highlight)\n- Sửa lỗi nạp font chữ trong mục Style (Đầy đủ 30 font chữ)",
+  "changelog": "- Tối ưu bộ tính toán GPU chuyên sâu: Bật 2-Pass Full-Res Multipass, Spatial/Temporal-AQ, Lookahead 32, Surfaces 32 trên RTX 5060\n- Khắc phục triệt để lỗi rút gọn câu: Đồng bộ 100% qua Custom API thay vì gọi nhầm Gemini\n- Làm sạch ô nhập Gemini API Key trong Cài đặt khi dùng Custom API\n- Tối ưu tải CPU i5-14600F mát mẻ, êm ái khi render video",
   "download_url": "https://raw.githubusercontent.com/Hoatokisaki/vietsub/main/patch_v2.7.zip",
   "type": "patch",
   "size_mb": 1
