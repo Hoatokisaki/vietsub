@@ -766,7 +766,7 @@ def chatgpt_translate_logic(
     target_lang: str = 'Tiếng Việt',
     model: str = 'auto',
 ) -> str:
-    """Translates an SRT subtitle file using ChatGPT Web cookies."""
+    """Translates an SRT subtitle file using ChatGPT Web cookies with error resume."""
     if not os.path.exists(srt_path):
         raise FileNotFoundError(f"Không tìm thấy file kịch bản gốc: {srt_path}")
 
@@ -779,7 +779,24 @@ def chatgpt_translate_logic(
         raise ValueError("File SRT không có phụ đề hợp lệ để dịch.")
 
     total_subs = len(subtitles)
-    status_cb(f"Khởi động ChatGPT Web dịch {total_subs} câu sang {target_lang}...", 0.05)
+
+    from translation_checkpoint import TranslationProgressManager
+    pm = TranslationProgressManager(workspace_dir, target_lang)
+    translated_map, missing_indices = pm.load_progress(subtitles)
+
+    if len(missing_indices) == 0:
+        status_cb(f"Tất cả {total_subs} câu đã được dịch hoàn tất từ trước. Đang hoàn thiện file phụ đề...", 1.0)
+        pm.mark_completed(subtitles)
+        return pm.out_srt_file
+
+    if len(translated_map) > 0:
+        status_cb(
+            f"[TIẾP TỤC DỊCH] Đã có {len(translated_map)}/{total_subs} câu. "
+            f"Đang tiếp tục dịch {len(missing_indices)} câu còn lại bằng ChatGPT Web...",
+            0.05 + 0.90 * (len(translated_map) / total_subs)
+        )
+    else:
+        status_cb(f"Khởi động ChatGPT Web dịch {total_subs} câu sang {target_lang}...", 0.05)
 
     client = ChatGPTWebClient(cookies=cookies, model=model)
 
@@ -810,24 +827,27 @@ def chatgpt_translate_logic(
     except Exception:
         novel_translation_rules = ""
 
-    chunk_size = 45  # Optimized chunk size: cuts roundtrips and network delay by 50%
-    translated_texts = []
-    chunk_index = 0
-    total_chunks = (total_subs + chunk_size - 1) // chunk_size
+    chunk_size = 45  # Optimized chunk size
+    chunks = []
+    curr_indices = []
+    for idx in missing_indices:
+        curr_indices.append(idx)
+        if len(curr_indices) >= chunk_size:
+            chunks.append(list(curr_indices))
+            curr_indices = []
+    if curr_indices:
+        chunks.append(list(curr_indices))
 
-    for start_i in range(0, total_subs, chunk_size):
+    for chunk_indices in chunks:
         if cancel_event and cancel_event.is_set():
             return "CANCELLED"
 
-        end_i = min(start_i + chunk_size, total_subs)
-        chunk = subtitles[start_i:end_i]
+        chunk = [subtitles[i] for i in chunk_indices]
         chunk_num_lines = len(chunk)
-        chunk_index += 1
 
-        pct = 0.05 + 0.90 * (start_i / max(1, total_subs))
-        status_cb(f"Đang dịch sang {target_lang} ({start_i + 1}-{end_i}/{total_subs} câu)...", pct)
+        pct = 0.05 + 0.90 * (len(pm.translations) / max(1, total_subs))
+        status_cb(f"Đang dịch sang {target_lang} ({len(pm.translations) + 1}-{min(len(pm.translations) + chunk_num_lines, total_subs)}/{total_subs} câu)...", pct)
 
-        # Build chunk input
         chunk_lines = [f"[{s['duration']:.1f}s] {s['text']}" for s in chunk]
         chunk_input = "\n".join(chunk_lines)
 
@@ -841,51 +861,47 @@ def chatgpt_translate_logic(
             f"Bản dịch ({chunk_num_lines} dòng tương ứng):"
         )
 
-        resp = client.send_message(prompt, cancel_event=cancel_event)
-        if resp == "CANCELLED":
-            return "CANCELLED"
+        try:
+            resp = client.send_message(prompt, cancel_event=cancel_event)
+            if resp == "CANCELLED":
+                return "CANCELLED"
 
-        # Clean markdown code blocks if any
-        if resp.startswith("```"):
-            resp = re.sub(r"^```[a-zA-Z]*\n", "", resp)
-            resp = re.sub(r"\n```$", "", resp)
+            if resp.startswith("```"):
+                resp = re.sub(r"^```[a-zA-Z]*\n", "", resp)
+                resp = re.sub(r"\n```$", "", resp)
 
-        raw_lines = [clean_translated_line(l) for l in resp.splitlines() if l.strip()]
+            raw_lines = [clean_translated_line(l) for l in resp.splitlines() if l.strip()]
 
-        # Align chunk lines
-        if len(raw_lines) == chunk_num_lines:
-            translated_texts.extend(raw_lines)
-        elif len(raw_lines) > chunk_num_lines:
-            # More lines than expected -> take first chunk_num_lines or merge excess into last
-            matched = raw_lines[:chunk_num_lines - 1]
-            matched.append(" ".join(raw_lines[chunk_num_lines - 1:]))
-            translated_texts.extend(matched)
-        else:
-            # Fewer lines than expected -> pad missing with original or empty
-            for k in range(chunk_num_lines):
-                if k < len(raw_lines):
-                    translated_texts.append(raw_lines[k])
-                else:
-                    translated_texts.append(chunk[k]["text"])
+            # Align chunk lines
+            aligned = []
+            if len(raw_lines) == chunk_num_lines:
+                aligned = raw_lines
+            elif len(raw_lines) > chunk_num_lines:
+                matched = raw_lines[:chunk_num_lines - 1]
+                matched.append(" ".join(raw_lines[chunk_num_lines - 1:]))
+                aligned = matched
+            else:
+                for k in range(chunk_num_lines):
+                    if k < len(raw_lines):
+                        aligned.append(raw_lines[k])
+                    else:
+                        aligned.append(chunk[k]["text"])
 
-    if len(translated_texts) < total_subs:
-        translated_texts.extend([subtitles[k]["text"] for k in range(len(translated_texts), total_subs)])
+            # Save completed chunk immediately
+            pm.save_chunk(chunk_indices, aligned, subtitles)
+        except Exception as exc:
+            saved_count = len(pm.translations)
+            err_msg = (
+                f"[TẠM DỪNG DO LỖI] Đã lưu tiến trình dịch ({saved_count}/{total_subs} câu). "
+                f"Lỗi: {exc}. "
+                f"Khi khắc phục xong, bạn chỉ cần nhấn nút 'Tiếp tục dịch' để tiếp tục!"
+            )
+            status_cb(err_msg, 0.05 + 0.90 * (saved_count / max(1, total_subs)))
+            raise RuntimeError(err_msg)
 
-    # Assign translated text back to subtitles
-    translated_subs = []
-    for i, s in enumerate(subtitles):
-        t_sub = dict(s)
-        t_sub["text"] = translated_texts[i] if i < len(translated_texts) else s["text"]
-        translated_subs.append(t_sub)
-
-    # Save to Data/temp_translated.srt
-    data_dir = os.path.join(workspace_dir, "Data")
-    os.makedirs(data_dir, exist_ok=True)
-    out_srt_path = os.path.join(data_dir, "temp_translated.srt")
-
-    final_content = format_srt_content(translated_subs)
-    with open(out_srt_path, "w", encoding="utf-8") as f:
-        f.write(final_content)
+    # Finalize
+    pm.mark_completed(subtitles)
+    out_srt_path = pm.out_srt_file
 
     # Apply timing optimization if available
     try:
