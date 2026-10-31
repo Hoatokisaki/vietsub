@@ -149,7 +149,7 @@ class CustomAPIClient:
 
     def send_completion(self, messages: list, temperature: float = 0.3, max_tokens: int = 4096, cancel_event=None) -> str:
         endpoint = f"{self.base_url}/chat/completions"
-        max_retries = max(3, len(self.api_keys) * 2)
+        max_retries = max(8, len(self.api_keys) * 4)
 
         for attempt in range(max_retries):
             if cancel_event and cancel_event.is_set():
@@ -158,7 +158,7 @@ class CustomAPIClient:
             current_key = self._get_next_key()
             headers = {
                 "Content-Type": "application/json",
-                "User-Agent": "SirVietsub/2.6 (Custom-API-Client)",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
             }
             if current_key:
                 headers["Authorization"] = f"Bearer {current_key}"
@@ -203,9 +203,19 @@ class CustomAPIClient:
                     raise FileNotFoundError(f"404 Not Found: Model '{self.model}' không tồn tại hoặc sai Base URL ({endpoint})! Chi tiết: {err_msg}")
                 elif he.code == 402:
                     raise PermissionError(f"402 Payment Required: Tài khoản API hết số dư (Quota/Balance)! Chi tiết: {err_msg}")
-                elif he.code in (429, 500, 502, 503, 504):
+                elif he.code == 429:
                     if attempt < max_retries - 1:
-                        sleep_time = min(2 ** (attempt + 1) + random.uniform(0.5, 1.5), 10.0)
+                        retry_after = he.headers.get("Retry-After")
+                        if retry_after and retry_after.isdigit():
+                            sleep_time = min(float(retry_after) + 1.0, 30.0)
+                        else:
+                            sleep_time = min(2.5 * (attempt + 1) + random.uniform(0.5, 2.0), 20.0)
+                        time.sleep(sleep_time)
+                        continue
+                    raise RuntimeError(f"Lỗi máy chủ API (429): {err_msg}")
+                elif he.code in (500, 502, 503, 504):
+                    if attempt < max_retries - 1:
+                        sleep_time = min(1.5 * (attempt + 1) + random.uniform(0.5, 1.5), 12.0)
                         time.sleep(sleep_time)
                         continue
                     raise RuntimeError(f"Lỗi máy chủ API ({he.code}): {err_msg}")
@@ -351,7 +361,7 @@ def custom_api_translate_logic(
     target_lang: str = "Tiếng Việt",
     **kwargs
 ) -> str:
-    """Translates an SRT subtitle file using an OpenAI-compatible Custom API with high concurrency."""
+    """Translates an SRT subtitle file using an OpenAI-compatible Custom API with high concurrency and error resume."""
     if not os.path.exists(srt_path):
         raise FileNotFoundError(f"Không tìm thấy file kịch bản gốc: {srt_path}")
 
@@ -374,7 +384,24 @@ def custom_api_translate_logic(
         raise ValueError("File SRT không có nội dung phụ đề hợp lệ để dịch!")
 
     total_subs = len(subtitles)
-    status_cb(f"Khởi động dịch {total_subs} câu với {model_name}...", 0.05)
+
+    from translation_checkpoint import TranslationProgressManager
+    pm = TranslationProgressManager(workspace_dir, target_lang)
+    translated_map, missing_indices = pm.load_progress(subtitles)
+
+    if len(missing_indices) == 0:
+        status_cb(f"Tất cả {total_subs} câu đã được dịch hoàn tất từ trước. Đang hoàn thiện file phụ đề...", 1.0)
+        pm.mark_completed(subtitles)
+        return pm.out_srt_file
+
+    if len(translated_map) > 0:
+        status_cb(
+            f"[TIẾP TỤC DỊCH] Đã có {len(translated_map)}/{total_subs} câu. "
+            f"Đang tiếp tục dịch {len(missing_indices)} câu còn lại bằng {model_name}...",
+            0.05 + 0.90 * (len(translated_map) / total_subs)
+        )
+    else:
+        status_cb(f"Khởi động dịch {total_subs} câu với {model_name}...", 0.05)
 
     rules_template = (
         "Bạn là chuyên gia dịch thuật phụ đề video phim ảnh chuyên nghiệp sang {target_lang}.\n"
@@ -398,18 +425,24 @@ def custom_api_translate_logic(
 
     chunk_size = 35  # Optimized chunk size for custom APIs
     chunks = []
-    for start_i in range(0, total_subs, chunk_size):
-        end_i = min(start_i + chunk_size, total_subs)
-        chunks.append((start_i, end_i, subtitles[start_i:end_i]))
+    curr_indices = []
+    for idx in missing_indices:
+        curr_indices.append(idx)
+        if len(curr_indices) >= chunk_size:
+            chunks.append(list(curr_indices))
+            curr_indices = []
+    if curr_indices:
+        chunks.append(list(curr_indices))
 
     total_chunks = len(chunks)
-    chunk_results = [None] * total_chunks
-    completed_subs = [0]  # mutable counter
+    completed_subs = [len(translated_map)]
+    last_error = [None]
 
-    def _process_chunk(chunk_idx, start_i, end_i, chunk):
+    def _process_chunk(chunk_idx, chunk_indices):
         if cancel_event and cancel_event.is_set():
             return "CANCELLED"
 
+        chunk = [subtitles[i] for i in chunk_indices]
         chunk_num_lines = len(chunk)
         chunk_lines = [f"[{s['duration']:.1f}s] {s['text']}" for s in chunk]
         chunk_input = "\n".join(chunk_lines)
@@ -430,79 +463,79 @@ def custom_api_translate_logic(
             {"role": "user", "content": user_msg}
         ]
 
-        resp = client.send_completion(messages, temperature=0.3, max_tokens=4096, cancel_event=cancel_event)
-        if resp == "CANCELLED":
-            return "CANCELLED"
+        try:
+            resp = client.send_completion(messages, temperature=0.3, max_tokens=4096, cancel_event=cancel_event)
+            if resp == "CANCELLED":
+                return "CANCELLED"
 
-        # Clean markdown code blocks if any
-        resp = resp.strip()
-        if resp.startswith("```"):
-            resp = re.sub(r"^```[a-zA-Z]*\n", "", resp)
-            resp = re.sub(r"\n```$", "", resp).strip()
+            # Clean markdown code blocks if any
+            resp = resp.strip()
+            if resp.startswith("```"):
+                resp = re.sub(r"^```[a-zA-Z]*\n", "", resp)
+                resp = re.sub(r"\n```$", "", resp).strip()
 
-        raw_lines = [clean_translated_line(l) for l in resp.splitlines() if l.strip()]
+            raw_lines = [clean_translated_line(l) for l in resp.splitlines() if l.strip()]
 
-        # Align chunk lines to expected count
-        aligned = []
-        if len(raw_lines) == chunk_num_lines:
-            aligned = raw_lines
-        elif len(raw_lines) > chunk_num_lines:
-            aligned = raw_lines[:chunk_num_lines - 1]
-            aligned.append(" ".join(raw_lines[chunk_num_lines - 1:]))
-        else:
-            for k in range(chunk_num_lines):
-                if k < len(raw_lines):
-                    aligned.append(raw_lines[k])
-                else:
-                    aligned.append(chunk[k]["text"])
+            # Align chunk lines to expected count
+            aligned = []
+            if len(raw_lines) == chunk_num_lines:
+                aligned = raw_lines
+            elif len(raw_lines) > chunk_num_lines:
+                aligned = raw_lines[:chunk_num_lines - 1]
+                aligned.append(" ".join(raw_lines[chunk_num_lines - 1:]))
+            else:
+                for k in range(chunk_num_lines):
+                    if k < len(raw_lines):
+                        aligned.append(raw_lines[k])
+                    else:
+                        aligned.append(chunk[k]["text"])
 
-        completed_subs[0] += chunk_num_lines
-        pct = 0.05 + 0.90 * min(1.0, completed_subs[0] / max(1, total_subs))
-        status_cb(f"Đang dịch bằng {model_name} ({completed_subs[0]}/{total_subs} câu)...", pct)
-        return aligned
+            # Save completed chunk immediately to progress file and SRT!
+            pm.save_chunk(chunk_indices, aligned, subtitles)
 
-    # Execute with ThreadPoolExecutor (max_workers=3 for ultra-fast parallel translation)
-    max_workers = 3 if total_chunks >= 3 else total_chunks
+            completed_subs[0] += chunk_num_lines
+            pct = 0.05 + 0.90 * min(1.0, completed_subs[0] / max(1, total_subs))
+            status_cb(f"Đang dịch bằng {model_name} ({completed_subs[0]}/{total_subs} câu)...", pct)
+            return aligned
+        except Exception as exc:
+            last_error[0] = exc
+            raise exc
+
+    # Execute with ThreadPoolExecutor
+    max_workers = 3 if total_chunks >= 3 else max(1, total_chunks)
+    has_err = False
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(_process_chunk, idx, start_i, end_i, chunk): idx
-            for idx, (start_i, end_i, chunk) in enumerate(chunks)
+            executor.submit(_process_chunk, idx, c_indices): idx
+            for idx, c_indices in enumerate(chunks)
         }
         for future in concurrent.futures.as_completed(futures):
             if cancel_event and cancel_event.is_set():
                 executor.shutdown(wait=False, cancel_futures=True)
                 return "CANCELLED"
-            idx = futures[future]
-            res = future.result()
-            if res == "CANCELLED":
+            try:
+                res = future.result()
+                if res == "CANCELLED":
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    return "CANCELLED"
+            except Exception as exc:
+                has_err = True
                 executor.shutdown(wait=False, cancel_futures=True)
-                return "CANCELLED"
-            chunk_results[idx] = res
+                break
 
-    # Combine all translated lines in order
-    translated_texts = []
-    for lines in chunk_results:
-        if lines:
-            translated_texts.extend(lines)
+    if has_err and last_error[0]:
+        saved_count = len(pm.translations)
+        err_msg = (
+            f"[TẠM DỪNG DO LỖI] Đã lưu tiến trình dịch ({saved_count}/{total_subs} câu). "
+            f"Lỗi: {last_error[0]}. "
+            f"Khi khắc phục xong, bạn chỉ cần nhấn nút 'Tiếp tục dịch' để tiếp tục!"
+        )
+        status_cb(err_msg, 0.05 + 0.90 * (saved_count / max(1, total_subs)))
+        raise RuntimeError(err_msg)
 
-    if len(translated_texts) < total_subs:
-        translated_texts.extend([subtitles[k]["text"] for k in range(len(translated_texts), total_subs)])
-
-    # Assign translated text back to subtitles
-    translated_subs = []
-    for i, s in enumerate(subtitles):
-        t_sub = dict(s)
-        t_sub["text"] = translated_texts[i] if i < len(translated_texts) else s["text"]
-        translated_subs.append(t_sub)
-
-    # Save to Data/temp_translated.srt
-    data_dir = os.path.join(workspace_dir, "Data")
-    os.makedirs(data_dir, exist_ok=True)
-    out_srt_path = os.path.join(data_dir, "temp_translated.srt")
-
-    final_content = format_srt_content(translated_subs)
-    with open(out_srt_path, "w", encoding="utf-8") as f:
-        f.write(final_content)
+    # Finalize
+    pm.mark_completed(subtitles)
+    out_srt_path = pm.out_srt_file
 
     # Apply timing optimization if available
     try:
@@ -514,7 +547,6 @@ def custom_api_translate_logic(
     # Clean any watermark from srt
     try:
         if os.path.exists(out_srt_path):
-            import re
             from pathlib import Path
             raw = Path(out_srt_path).read_text(encoding="utf-8-sig")
             cleaned = re.sub(r'\[(sirvietsub|luavietsup)\]\s*', '', raw, flags=re.IGNORECASE)
