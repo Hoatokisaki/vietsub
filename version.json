@@ -1,9 +1,9 @@
 {
-  "version": "2.7",
-  "release_date": "2026-10-29",
-  "title": "Bản cập nhật luaVietsup Pro v2.7",
-  "changelog": "- Khắc phục triệt để lỗi lệch font chữ: Font chữ video xuất ra chuẩn 100% đúng font xem trước (tự động nạp bảng font libass cho Montserrat Black, Bold, Medium, v.v.)\n- Khắc phục lỗi nút Render không phản hồi khi bấm Dừng lại: Tức thì hủy tiến trình ngầm và mở khóa toàn bộ nút bấm\n- Tối ưu bộ tính toán GPU chuyên sâu: 2-Pass Full-Res Multipass, Spatial/Temporal-AQ, Lookahead 32, Surfaces 32 trên RTX 5060\n- Đồng bộ 100% rút gọn câu qua Custom API thay vì gọi nhầm Gemini",
-  "download_url": "https://raw.githubusercontent.com/Hoatokisaki/vietsub/main/patch_v2.7.zip",
+  "version": "2.8",
+  "release_date": "2026-10-31",
+  "title": "Bản cập nhật luaVietsup Pro v2.8",
+  "changelog": "- Tính năng tiếp tục dịch thông minh khi gặp lỗi: Tự động lưu checkpoint từng câu ngay khi hoàn thành, nếu gặp lỗi (429 Rate Limit, rớt mạng...) chỉ cần nhấn 'Tiếp tục dịch' để dịch tiếp các câu còn lại mà không phải dịch lại từ đầu. Hỗ trợ menu chuột phải 'Tiếp tục dịch' hoặc 'Dịch lại từ đầu'.\n- Khắc phục tính năng Áp dụng cho tất cả: Đồng bộ toàn diện cả độ to nhỏ (kích thước wm_scale), vị trí và kiểu chữ của Watermark cho toàn bộ video trong danh sách và ghi nhớ mặc định.",
+  "download_url": "https://raw.githubusercontent.com/Hoatokisaki/vietsub/main/patch_v2.8.zip",
   "type": "patch",
   "size_mb": 1
 }
